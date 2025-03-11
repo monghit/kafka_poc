@@ -1,0 +1,116 @@
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: zookeeper
+    restart: always
+    environment:
+      ZOOKEEPER_CLIENT_PORT: ${ZOOKEEPER_CLIENT_PORT}
+      ZOOKEEPER_TICK_TIME: ${ZOOKEEPER_TICK_TIME}
+      ZOOKEEPER_MAX_CLIENT_CNXNS: ${ZOOKEEPER_MAX_CLIENT_CNXNS}
+      ZOOKEEPER_JUTE_MAXBUFFER: ${ZOOKEEPER_JUTE_MAXBUFFER}
+    volumes:
+      - ./infrastructure/kafka/zookeeper-data:/var/lib/zookeeper/data
+      - ./infrastructure/kafka/zookeeper-datalog:/var/lib/zookeeper/log
+    ports:
+      - "${ZOOKEEPER_PORT}:2181"
+    networks:
+      - kafka-network
+
+  zoonavigator:
+    image: elkozmon/zoonavigator:latest
+    container_name: zoonavigator
+    restart: always
+    depends_on:
+      - zookeeper
+    environment:
+      - ZK_HOSTS=zookeeper:2181
+    ports:
+      - "${ZOONAVIGATOR_PORT}:9000"
+    networks:
+      - kafka-network
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: kafka
+    restart: always
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: ${KAFKA_BROKER_ID}
+      KAFKA_ZOOKEEPER_CONNECT: ${KAFKA_ZOOKEEPER_CONNECT}
+      KAFKA_ADVERTISED_LISTENERS: ${KAFKA_ADVERTISED_LISTENERS}
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: ${KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR}
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: ${KAFKA_TRANSACTION_STATE_LOG_MIN_ISR}
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: ${KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR}
+      KAFKA_LOG_RETENTION_HOURS: ${KAFKA_LOG_RETENTION_HOURS}
+      KAFKA_LOG_DIRS: ${KAFKA_LOG_DIRS}
+    volumes:
+      - ./infrastructure/kafka/kafka-data:/var/lib/kafka/data
+    ports:
+      - "${KAFKA_PORT}:9092"
+    networks:
+      - kafka-network
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    restart: always
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local-kafka
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    ports:
+      - "${KAFKA_UI_PORT}:8080"
+    networks:
+      - kafka-network
+
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:latest
+    container_name: kafka-exporter
+    restart: always
+    depends_on:
+      - kafka
+    command:
+      - "--kafka.server=kafka:9092"
+    ports:
+      - "${KAFKA_EXPORTER_PORT}:9308"
+    networks:
+      - kafka-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: always
+    volumes:
+      - ./infrastructure/monitoring/prometheus-data:/prometheus
+      - ./infrastructure/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    ports:
+      - "${PROMETHEUS_PORT}:9090"
+    networks:
+      - kafka-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: always
+    depends_on:
+      - prometheus
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+    volumes:
+      - ./infrastructure/monitoring/grafana-data:/var/lib/grafana
+      - ./infrastructure/monitoring/grafana/dashboards:/etc/grafana/dashboards
+      - ./infrastructure/monitoring/grafana/datasources:/etc/grafana/datasources
+    ports:
+      - "${GRAFANA_PORT}:3000"
+    networks:
+      - kafka-network
+
+networks:
+  kafka-network:
+    driver: bridge
