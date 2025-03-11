@@ -168,5 +168,5 @@ scrape_configs:
 Si deseas contribuir, abre un issue o un pull request en el repositorio.
 
 ## Licencia
-Este proyecto está bajo la licencia MIT.
+Este proyecto está bajo la licencia Apache 2.0
 
